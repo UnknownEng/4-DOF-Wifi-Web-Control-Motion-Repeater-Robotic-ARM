@@ -1,0 +1,67 @@
+# Wokwi automated test scenario for Robot_Arm.ino
+# Run:  wokwi-cli --scenario test/robot_arm.test.yaml --timeout 60000 .
+name: Robot arm fixes
+version: 1
+author: Robot Arm
+
+steps:
+  - wait-serial: 'Ready.'
+
+  # 1. Boot state: every joint at its home angle, with its limits
+  - write-serial: "Status\n"
+  - wait-serial: 'Joint,Base,0,180,90'
+  - wait-serial: 'Joint,Gripper,30,150,90'
+
+  # 2. Out-of-range angle is clamped to the joint limit (not 999 / not microseconds)
+  - write-serial: "Move,Gripper,999\n"
+  - delay: 1500ms
+  - write-serial: "Status\n"
+  - wait-serial: 'Joint,Gripper,30,150,150'
+
+  # 3. Garbage input is rejected instead of slamming the servo to 0
+  - write-serial: "Move,Base,abc\n"
+  - wait-serial: 'Info,Bad Move command'
+  - write-serial: "Move,Nope,10\n"
+  - wait-serial: 'Info,Bad Move command'
+
+  # 4. Record two moves
+  - write-serial: "Record,1\n"
+  - wait-serial: 'Info,Recording...'
+  - delay: 300ms
+  - write-serial: "Move,Base,45\n"
+  - delay: 500ms
+  - write-serial: "Move,Elbow,120\n"
+  - delay: 1000ms
+  - write-serial: "Record,0\n"
+  - wait-serial: 'Info,Saved 2 steps'
+
+  # 5. Play cannot be combined with live moves or recording
+  - write-serial: "Play,1\n"
+  - wait-serial: 'Info,Playing'
+  - write-serial: "Move,Base,10\n"
+  - wait-serial: 'Info,Stop playback first'
+  - write-serial: "Record,1\n"
+  - wait-serial: 'Info,Stop playback first'
+
+  # 6. Stop is immediate (old code could block for the whole recorded pause)
+  - write-serial: "Play,0\n"
+  - wait-serial: 'Info,Playback stopped'
+  - write-serial: "Status\n"
+  - wait-serial: 'Info,Mode Idle'
+
+  # 7. Full playback: homing to start pose -> 2 s pause -> recorded steps
+  - write-serial: "Play,1\n"
+  - wait-serial: 'Info,Playing'
+  - delay: 6000ms
+  - write-serial: "Status\n"
+  - wait-serial: 'Info,Mode Play'
+  - write-serial: "Play,0\n"
+  - wait-serial: 'Info,Playback stopped'
+
+  # 8. Home command
+  - write-serial: "Home,1\n"
+  - wait-serial: 'Info,Homing'
+  - delay: 3000ms
+  - write-serial: "Status\n"
+  - wait-serial: 'Joint,Base,0,180,90'
+  - wait-serial: 'Joint,Gripper,30,150,90'
